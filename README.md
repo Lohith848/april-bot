@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🌸 April — Your Personal 24/7 AI Assistant
 
 April is your private Telegram AI assistant that:
@@ -264,3 +265,7 @@ She's now running 24/7 on the cloud.
 ---
 
 *Built with ❤️ — April is yours, forever.*
+=======
+# april-bot
+24/7 Personal bot 
+>>>>>>> 6cead56c4ffcdad8db0b48169aed32ba6589cee5
