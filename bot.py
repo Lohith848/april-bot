@@ -1,10 +1,12 @@
 """
 April — Your Personal 24/7 AI Assistant (Telegram Bot)
-Built with: python-telegram-bot + Groq (Llama 3.3 70B) + SQLite
+Built with: python-telegram-bot + Groq (Llama 3.3 70B) + SQLite + Starlette
 """
 
 import logging
 import sys
+import time
+
 from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
@@ -14,6 +16,11 @@ from telegram.ext import (
     ContextTypes,
 )
 from groq import Groq
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.routing import Route
+import uvicorn
 
 from config import (
     TELEGRAM_TOKEN,
@@ -41,15 +48,16 @@ logger = logging.getLogger("April")
 groq_client = Groq(api_key=GROQ_API_KEY)
 memory = ConversationMemory()
 
+# ─── Last reply store (for Electron desktop polling) ────────────────────────
+last_reply = {"text": "", "timestamp": 0}
+
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 def is_owner(update: Update) -> bool:
-    """Only allow the owner to use April."""
     return update.effective_chat.id == OWNER_CHAT_ID
 
 
 async def send_long_message(update: Update, text: str):
-    """Split and send messages that exceed Telegram's 4096 char limit."""
     limit = 4096
     if len(text) <= limit:
         await update.message.reply_text(text)
@@ -64,7 +72,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_owner(update):
         await update.message.reply_text("🔒 I'm a private assistant. Access denied.")
         return
-
     await update.message.reply_text(
         "🌸 *Hey! I'm April* — your personal AI assistant.\n\n"
         "I'm here for you 24/7, I know who you are, and I remember our conversations.\n\n"
@@ -137,16 +144,16 @@ async def cmd_about(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*Brain:* Llama 3.3 70B via Groq\n"
         "*Memory:* SQLite (persistent)\n"
         "*Hosting:* Railway (24/7 cloud)\n"
-        "*Interface:* Telegram\n\n"
-        "I'm private — only you can talk to me. "
-        "I know your personal info and remember our conversations. "
-        "Think of me as your always-available, always-ready assistant. 💫",
+        "*Interface:* Telegram + Desktop HUD\n\n"
+        "I'm private — only you can talk to me. 💫",
         parse_mode="Markdown",
     )
 
 
 # ─── Message Handler ──────────────────────────────────────────────────────────
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global last_reply
+
     if not is_owner(update):
         await update.message.reply_text("🔒 I'm a private assistant. Access denied.")
         return
@@ -157,13 +164,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user_message:
         return
 
-    # Store user message
     memory.add_message(chat_id, "user", user_message)
-
-    # Show typing indicator
     await context.bot.send_chat_action(chat_id=chat_id, action="typing")
 
-    # Build message history for Groq
     history = memory.get_history(chat_id, limit=MAX_HISTORY)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + history
 
@@ -176,8 +179,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         reply = response.choices[0].message.content.strip()
 
-        # Store assistant reply
         memory.add_message(chat_id, "assistant", reply)
+
+        # ── Save for Electron desktop app to poll ───────────────────────
+        last_reply["text"] = reply
+        last_reply["timestamp"] = int(time.time() * 1000)
+        # ────────────────────────────────────────────────────────────────
 
         await send_long_message(update, reply)
 
@@ -193,52 +200,98 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Unhandled error: {context.error}", exc_info=context.error)
 
 
+# ─── Starlette HTTP Routes ────────────────────────────────────────────────────
+async def telegram_webhook(request: Request):
+    """Receive Telegram updates via webhook."""
+    data = await request.json()
+    update = Update.de_json(data, ptb_app.bot)
+    await ptb_app.process_update(update)
+    return PlainTextResponse("OK")
+
+
+async def get_last_reply(request: Request):
+    """Electron desktop app polls this to get April's latest reply."""
+    since = int(request.query_params.get("since", 0))
+    if last_reply["timestamp"] > since:
+        return JSONResponse(last_reply, headers={"Access-Control-Allow-Origin": "*"})
+    return JSONResponse({"text": "", "timestamp": 0}, headers={"Access-Control-Allow-Origin": "*"})
+
+
+async def health_check(request: Request):
+    return PlainTextResponse("April is alive 🌸")
+
+
+# ─── Build PTB app (global so webhook route can access it) ───────────────────
+ptb_app: Application = None
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 def main():
-    # Validate config first
-    validate_config()
+    global ptb_app
 
+    validate_config()
     logger.info("🌸 Starting April...")
 
-    # Build the application
-    app = Application.builder().token(TELEGRAM_TOKEN).build()
+    ptb_app = Application.builder().token(TELEGRAM_TOKEN).build()
 
-    # Register commands
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("clear", cmd_clear))
-    app.add_handler(CommandHandler("memory", cmd_memory))
-    app.add_handler(CommandHandler("about", cmd_about))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_error_handler(error_handler)
-
-    # Set bot commands menu (shows in Telegram UI)
-    async def post_init(app: Application):
-        await app.bot.set_my_commands([
-            BotCommand("start", "Wake April up"),
-            BotCommand("help", "Show all commands"),
-            BotCommand("clear", "Clear memory"),
-            BotCommand("memory", "Memory stats"),
-            BotCommand("about", "About April"),
-        ])
-        logger.info(f"✅ April is live! Owner chat ID: {OWNER_CHAT_ID}")
-
-    app.post_init = post_init
+    ptb_app.add_handler(CommandHandler("start", cmd_start))
+    ptb_app.add_handler(CommandHandler("help", cmd_help))
+    ptb_app.add_handler(CommandHandler("clear", cmd_clear))
+    ptb_app.add_handler(CommandHandler("memory", cmd_memory))
+    ptb_app.add_handler(CommandHandler("about", cmd_about))
+    ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    ptb_app.add_error_handler(error_handler)
 
     if WEBHOOK_URL:
-        # ── Cloud mode (Railway) — webhook ────────────────────────────────
+        # ── Cloud mode (Railway) — Starlette + uvicorn ────────────────────
         logger.info(f"☁️  Webhook mode | Port: {PORT} | URL: {WEBHOOK_URL}")
-        app.run_webhook(
-            listen="0.0.0.0",
-            port=PORT,
-            url_path=TELEGRAM_TOKEN,
-            webhook_url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}",
-            drop_pending_updates=True,
-        )
+
+        starlette_app = Starlette(routes=[
+            Route(f"/{TELEGRAM_TOKEN}", telegram_webhook, methods=["POST"]),
+            Route("/last-reply",        get_last_reply,   methods=["GET"]),
+            Route("/health",            health_check,     methods=["GET"]),
+        ])
+
+        async def on_startup():
+            await ptb_app.initialize()
+            await ptb_app.bot.set_webhook(
+                url=f"{WEBHOOK_URL}/{TELEGRAM_TOKEN}",
+                drop_pending_updates=True,
+            )
+            await ptb_app.bot.set_my_commands([
+                BotCommand("start",  "Wake April up"),
+                BotCommand("help",   "Show all commands"),
+                BotCommand("clear",  "Clear memory"),
+                BotCommand("memory", "Memory stats"),
+                BotCommand("about",  "About April"),
+            ])
+            await ptb_app.start()
+            logger.info(f"✅ April is live! Owner chat ID: {OWNER_CHAT_ID}")
+
+        async def on_shutdown():
+            await ptb_app.stop()
+
+        starlette_app.add_event_handler("startup",  on_startup)
+        starlette_app.add_event_handler("shutdown", on_shutdown)
+
+        uvicorn.run(starlette_app, host="0.0.0.0", port=PORT)
+
     else:
         # ── Local mode — polling ──────────────────────────────────────────
         logger.info("💻 Polling mode (local)")
-        app.run_polling(drop_pending_updates=True)
+
+        async def post_init(app: Application):
+            await app.bot.set_my_commands([
+                BotCommand("start",  "Wake April up"),
+                BotCommand("help",   "Show all commands"),
+                BotCommand("clear",  "Clear memory"),
+                BotCommand("memory", "Memory stats"),
+                BotCommand("about",  "About April"),
+            ])
+            logger.info(f"✅ April is live! Owner chat ID: {OWNER_CHAT_ID}")
+
+        ptb_app.post_init = post_init
+        ptb_app.run_polling(drop_pending_updates=True)
 
 
 if __name__ == "__main__":
