@@ -1,0 +1,29 @@
+# Environment — NEVER commit this
+.env
+
+# Database
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
