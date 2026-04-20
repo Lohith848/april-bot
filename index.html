@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>April</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep: #0f0f1a;
+    --bg-mid: #16213e;
+    --bg-surface: #1a1a2e;
+    --bg-card: #22223a;
+    --accent: #993556;
+    --accent-light: #c44a72;
+    --accent-dim: #4b1528;
+    --purple-bubble: #2d2d4e;
+    --purple-text: #d4c8f0;
+    --user-bubble: #993556;
+    --user-text: #fce8f0;
+    --text-primary: #e8e0f8;
+    --text-secondary: #8888aa;
+    --text-hint: #444466;
+    --border: #2d2d4e;
+    --online: #28c840;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-deep);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-primary);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Title Bar ── */
+  #titlebar {
+    -webkit-app-region: drag;
+    background: var(--bg-mid);
+    height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    gap: 8px;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  .win-btn {
+    -webkit-app-region: no-drag;
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  #btn-close { background: #ff5f57; }
+  #btn-min   { background: #febc2e; }
+  #btn-pin   { background: #28c840; }
+
+  #title-text {
+    flex: 1;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.5px;
+  }
+
+  #pin-label {
+    -webkit-app-region: no-drag;
+    font-size: 10px;
+    color: var(--text-hint);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 0.5px solid var(--border);
+    transition: color 0.15s;
+  }
+  #pin-label.pinned { color: #28c840; border-color: #28c840; }
+
+  /* ── Status bar ── */
+  #statusbar {
+    background: var(--bg-deep);
+    padding: 4px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 0.5px solid var(--border);
+  }
+
+  #online-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--online);
+    flex-shrink: 0;
+  }
+  #online-dot.offline { background: #555; }
+
+  #status-text {
+    font-size: 11px;
+    color: var(--text-hint);
+  }
+
+  /* ── Messages ── */
+  #messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    scroll-behavior: smooth;
+  }
+
+  #messages::-webkit-scrollbar { width: 3px; }
+  #messages::-webkit-scrollbar-track { background: transparent; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .msg-row { display: flex; flex-direction: column; gap: 2px; max-width: 84%; }
+  .msg-row.from-april { align-self: flex-start; }
+  .msg-row.from-user  { align-self: flex-end; }
+
+  .msg-name {
+    font-size: 10px;
+    color: var(--text-hint);
+    padding: 0 4px;
+  }
+
+  .bubble {
+    padding: 9px 13px;
+    font-size: 13px;
+    line-height: 1.55;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+
+  .from-april .bubble {
+    background: var(--purple-bubble);
+    color: var(--purple-text);
+    border-radius: 4px 14px 14px 14px;
+  }
+
+  .from-user .bubble {
+    background: var(--user-bubble);
+    color: var(--user-text);
+    border-radius: 14px 4px 14px 14px;
+  }
+
+  .msg-time {
+    font-size: 10px;
+    color: var(--text-hint);
+    padding: 0 4px;
+    text-align: right;
+  }
+  .from-april .msg-time { text-align: left; }
+
+  /* ── Typing indicator ── */
+  #typing-row {
+    display: none;
+    align-self: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    max-width: 84%;
+  }
+  #typing-row.visible { display: flex; }
+
+  .typing-bubble {
+    background: var(--purple-bubble);
+    border-radius: 4px 14px 14px 14px;
+    padding: 10px 14px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .typing-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #7f77dd;
+    animation: tdot 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes tdot {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30% { transform: translateY(-5px); opacity: 1; }
+  }
+
+  /* ── Input bar ── */
+  #inputbar {
+    background: var(--bg-mid);
+    padding: 10px 12px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    border-top: 0.5px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  #msg-input {
+    flex: 1;
+    background: var(--bg-deep);
+    border: 0.5px solid var(--border);
+    border-radius: 18px;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: var(--text-primary);
+    font-family: inherit;
+    outline: none;
+    resize: none;
+    min-height: 36px;
+    max-height: 100px;
+    overflow-y: auto;
+    line-height: 1.4;
+    transition: border-color 0.15s;
+  }
+
+  #msg-input::placeholder { color: var(--text-hint); }
+  #msg-input:focus { border-color: #534ab7; }
+
+  #send-btn {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.15s, transform 0.1s;
+  }
+  #send-btn:hover { background: var(--accent-light); }
+  #send-btn:active { transform: scale(0.93); }
+  #send-btn svg { width: 14px; height: 14px; fill: white; }
+
+  /* ── Layout ── */
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── Welcome message ── */
+  .welcome {
+    text-align: center;
+    padding: 24px 16px;
+    color: var(--text-hint);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .welcome-avatar {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    background: var(--accent-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+    font-size: 20px;
+    color: var(--accent-light);
+    border: 1px solid var(--accent);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Title Bar -->
+  <div id="titlebar">
+    <button class="win-btn" id="btn-close" title="Hide"></button>
+    <button class="win-btn" id="btn-min"   title="Minimize"></button>
+    <button class="win-btn" id="btn-pin"   title="Toggle always on top"></button>
+    <span id="title-text">April</span>
+    <span id="pin-label" class="pinned">on top</span>
+  </div>
+
+  <!-- Status Bar -->
+  <div id="statusbar">
+    <div id="online-dot"></div>
+    <span id="status-text">connected via Railway</span>
+  </div>
+
+  <!-- Messages -->
+  <div id="messages">
+    <div class="welcome">
+      <div class="welcome-avatar">A</div>
+      Hey Lohith! I'm April, your personal assistant.<br>
+      I'm connected to Railway — ask me anything.
+    </div>
+  </div>
+
+  <!-- Typing indicator (lives here, moved by JS) -->
+  <div id="typing-row">
+    <span class="msg-name">April</span>
+    <div class="typing-bubble">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  </div>
+
+  <!-- Input Bar -->
+  <div id="inputbar">
+    <textarea id="msg-input" placeholder="Message April..." rows="1"></textarea>
+    <button id="send-btn">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+    </button>
+  </div>
+
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages')
+  const inputEl    = document.getElementById('msg-input')
+  const sendBtn    = document.getElementById('send-btn')
+  const typingRow  = document.getElementById('typing-row')
+  const statusDot  = document.getElementById('online-dot')
+  const statusText = document.getElementById('status-text')
+  const pinLabel   = document.getElementById('pin-label')
+  const btnClose   = document.getElementById('btn-close')
+  const btnMin     = document.getElementById('btn-min')
+  const btnPin     = document.getElementById('btn-pin')
+
+  let isPinned = true
+  let waitingForReply = false
+  let replyTimeout = null
+
+  // Window controls
+  btnClose.addEventListener('click', () => window.april.close())
+  btnMin.addEventListener('click', () => window.april.minimize())
+  btnPin.addEventListener('click', () => {
+    isPinned = !isPinned
+    window.april.toggleAlwaysOnTop(isPinned)
+    pinLabel.textContent = isPinned ? 'on top' : 'free'
+    pinLabel.classList.toggle('pinned', isPinned)
+  })
+
+  function scrollBottom() {
+    messagesEl.scrollTop = messagesEl.scrollHeight
+  }
+
+  function timeNow() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  function addMessage(text, from) {
+    const row = document.createElement('div')
+    row.className = `msg-row from-${from}`
+
+    if (from === 'april') {
+      const name = document.createElement('span')
+      name.className = 'msg-name'
+      name.textContent = 'April'
+      row.appendChild(name)
+    }
+
+    const bubble = document.createElement('div')
+    bubble.className = 'bubble'
+    bubble.textContent = text
+    row.appendChild(bubble)
+
+    const time = document.createElement('span')
+    time.className = 'msg-time'
+    time.textContent = timeNow()
+    row.appendChild(time)
+
+    messagesEl.appendChild(row)
+    scrollBottom()
+  }
+
+  function showTyping() {
+    messagesEl.appendChild(typingRow)
+    typingRow.classList.add('visible')
+    scrollBottom()
+  }
+
+  function hideTyping() {
+    typingRow.classList.remove('visible')
+  }
+
+  async function sendMessage() {
+    const text = inputEl.value.trim()
+    if (!text || waitingForReply) return
+
+    inputEl.value = ''
+    inputEl.style.height = 'auto'
+    addMessage(text, 'user')
+    showTyping()
+    waitingForReply = true
+
+    statusDot.classList.remove('offline')
+    statusText.textContent = 'sending...'
+
+    const ok = await window.april.sendMessage(text)
+
+    if (ok) {
+      statusText.textContent = 'waiting for April...'
+      // Safety timeout — if no reply in 30s, reset
+      replyTimeout = setTimeout(() => {
+        hideTyping()
+        waitingForReply = false
+        statusText.textContent = 'connected via Railway'
+        addMessage("Sorry, I didn't respond in time. Try again!", 'april')
+      }, 30000)
+    } else {
+      hideTyping()
+      waitingForReply = false
+      statusDot.classList.add('offline')
+      statusText.textContent = 'offline — check Railway'
+      addMessage('Could not reach Railway. Check your internet connection.', 'april')
+    }
+  }
+
+  // Receive reply from main process (polled from Telegram)
+  window.april.onReply((data) => {
+    if (replyTimeout) {
+      clearTimeout(replyTimeout)
+      replyTimeout = null
+    }
+    hideTyping()
+    waitingForReply = false
+    addMessage(data.text, 'april')
+    statusText.textContent = 'connected via Railway'
+  })
+
+  // Send on Enter (Shift+Enter for newline)
+  inputEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage()
+    }
+  })
+
+  // Auto-resize textarea
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto'
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 100) + 'px'
+  })
+
+  sendBtn.addEventListener('click', sendMessage)
+</script>
+</body>
+</html>

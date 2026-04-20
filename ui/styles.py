@@ -1,0 +1,5 @@
+BG_COLOR = "#0f172a"
+CHAT_BG = "#111827"
+TEXT_COLOR = "#e5e7eb"
+BUTTON_COLOR = "#2563eb"
+ENTRY_BG = "#1f2937"
